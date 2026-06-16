@@ -7,9 +7,10 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
     $new_status = $_POST['new_status'];
     
     // Lấy trạng thái hiện tại
-    $check = $conn->query("SELECT status FROM orders WHERE id = $order_id");
-    if ($check->num_rows > 0) {
-        $current_status = $check->fetch_assoc()['status'];
+    $check = $pdo->query("SELECT status FROM orders WHERE id = $order_id");
+    $check_res = $check->fetch(PDO::FETCH_ASSOC);
+    if ($check_res) {
+        $current_status = $check_res['status'];
         
         if ($current_status == 'delivered' || $current_status == 'cancelled') {
             echo "<script>alert('Không thể thay đổi trạng thái đơn hàng đã hoàn thành hoặc đã hủy!'); window.location.href='quanly_donhang.php';</script>";
@@ -17,34 +18,33 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
         }
         
         // Cập nhật trạng thái
-        $stmt = $conn->prepare("UPDATE orders SET status = ? WHERE id = ?");
-        $stmt->bind_param("si", $new_status, $order_id);
-        $stmt->execute();
+        $stmt = $pdo->prepare("UPDATE orders SET status = ? WHERE id = ?");
+        $stmt->execute([$new_status, $order_id]);
         
         // Nếu chuyển sang hủy (từ trạng thái khác hủy), hoàn trả kho
         if ($new_status == 'cancelled' && $current_status != 'cancelled') {
-            $items_res = $conn->query("SELECT product_id, quantity, product_type FROM order_items WHERE order_id = $order_id");
-            while ($item = $items_res->fetch_assoc()) {
+            $items_res = $pdo->query("SELECT product_id, quantity, product_type FROM order_items WHERE order_id = $order_id")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($items_res as $item) {
                 $pid = $item['product_id'];
                 $qty = $item['quantity'];
                 if ($item['product_type'] == 'sanpham') {
-                    $conn->query("UPDATE sanpham SET so_luong = so_luong + $qty WHERE id = $pid");
+                    $pdo->exec("UPDATE sanpham SET so_luong = so_luong + $qty WHERE id = $pid");
                 } else {
-                    $conn->query("UPDATE phukien SET so_luong = so_luong + $qty WHERE id = $pid");
+                    $pdo->exec("UPDATE phukien SET so_luong = so_luong + $qty WHERE id = $pid");
                 }
             }
         }
         
         // Nếu chuyển từ hủy sang trạng thái khác, trừ kho lại
         if ($current_status == 'cancelled' && $new_status != 'cancelled') {
-            $items_res = $conn->query("SELECT product_id, quantity, product_type FROM order_items WHERE order_id = $order_id");
-            while ($item = $items_res->fetch_assoc()) {
+            $items_res = $pdo->query("SELECT product_id, quantity, product_type FROM order_items WHERE order_id = $order_id")->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($items_res as $item) {
                 $pid = $item['product_id'];
                 $qty = $item['quantity'];
                 if ($item['product_type'] == 'sanpham') {
-                    $conn->query("UPDATE sanpham SET so_luong = GREATEST(0, so_luong - $qty) WHERE id = $pid");
+                    $pdo->exec("UPDATE sanpham SET so_luong = GREATEST(0, so_luong - $qty) WHERE id = $pid");
                 } else {
-                    $conn->query("UPDATE phukien SET so_luong = GREATEST(0, so_luong - $qty) WHERE id = $pid");
+                    $pdo->exec("UPDATE phukien SET so_luong = GREATEST(0, so_luong - $qty) WHERE id = $pid");
                 }
             }
         }
@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['a
 }
 
 // Lấy danh sách đơn hàng
-$orders = $conn->query("SELECT orders.*, users.name as customer_name, users.email FROM orders LEFT JOIN users ON orders.user_id = users.id ORDER BY orders.created_at DESC");
+$orders = $pdo->query("SELECT orders.*, users.name as customer_name, users.email FROM orders LEFT JOIN users ON orders.user_id = users.id ORDER BY orders.created_at DESC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
@@ -76,8 +76,8 @@ $orders = $conn->query("SELECT orders.*, users.name as customer_name, users.emai
             </tr>
         </thead>
         <tbody>
-            <?php if($orders->num_rows > 0): ?>
-                <?php while($row = $orders->fetch_assoc()): ?>
+            <?php if(count($orders) > 0): ?>
+                <?php foreach($orders as $row): ?>
                 <tr>
                     <td><strong>#<?php echo $row['id']; ?></strong></td>
                     <td>
@@ -107,7 +107,7 @@ $orders = $conn->query("SELECT orders.*, users.name as customer_name, users.emai
                         <form method="POST" style="display: flex; align-items: center; gap: 5px;">
                             <input type="hidden" name="action" value="update_status">
                             <input type="hidden" name="order_id" value="<?php echo $row['id']; ?>">
-                            <select name="new_status" class="form-select <?php echo $status_class; ?>" style="font-weight: 600;" onchange="this.form.submit()" <?php echo ($row['status'] == 'delivered' || $row['status'] == 'cancelled') ? 'disabled' : ''; ?>>
+                            <select name="new_status" class="form-select <?php echo $status_class; ?> auto-submit-select" style="font-weight: 600;" <?php echo ($row['status'] == 'delivered' || $row['status'] == 'cancelled') ? 'disabled' : ''; ?>>
                                 <option value="pending" <?php echo $row['status'] == 'pending' ? 'selected' : ''; ?>>Chờ xử lý</option>
                                 <option value="confirmed" <?php echo $row['status'] == 'confirmed' ? 'selected' : ''; ?>>Đã xác nhận</option>
                                 <option value="shipping" <?php echo $row['status'] == 'shipping' ? 'selected' : ''; ?>>Đang giao</option>
@@ -117,10 +117,10 @@ $orders = $conn->query("SELECT orders.*, users.name as customer_name, users.emai
                         </form>
                     </td>
                     <td>
-                        <button class="btn btn-secondary" onclick="viewDetails(<?php echo $row['id']; ?>)">Chi tiết</button>
+                        <button class="btn btn-secondary btn-view-details" data-id="<?php echo $row['id']; ?>">Chi tiết</button>
                     </td>
                 </tr>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
             <?php else: ?>
                 <tr><td colspan="7" style="text-align: center;">Chưa có đơn hàng nào</td></tr>
             <?php endif; ?>
@@ -128,11 +128,6 @@ $orders = $conn->query("SELECT orders.*, users.name as customer_name, users.emai
     </table>
 </div>
 
-<!-- Script xem chi tiết đơn hàng -->
-<script>
-function viewDetails(id) {
-    window.location.href = 'chitiet_donhang.php?id=' + id;
-}
-</script>
+<script src="js/quanly_donhang.js"></script>
 
 <?php include 'includes/footer.php'; ?>

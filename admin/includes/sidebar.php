@@ -31,6 +31,9 @@ $current_page = basename($_SERVER['PHP_SELF']);
         <a href="quanly_danhgia.php" class="<?php echo $current_page == 'quanly_danhgia.php' ? 'active' : ''; ?>">
             <i class="fas fa-star"></i> Đánh giá
         </a>
+        <a href="quanly_lienhe.php" class="<?php echo $current_page == 'quanly_lienhe.php' ? 'active' : ''; ?>">
+            <i class="fas fa-address-book"></i> Quản lý liên hệ
+        </a>
         <a href="../trangchu/index.php" target="_blank" style="margin-top: 30px; border-top: 1px solid #374151;">
             <i class="fas fa-globe"></i> Xem trang chủ
         </a>

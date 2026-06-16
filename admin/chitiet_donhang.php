@@ -9,20 +9,17 @@ if ($order_id <= 0) {
 }
 
 // Lấy thông tin đơn hàng và khách hàng
-$stmt = $conn->prepare("SELECT o.*, u.name as customer_name, u.email FROM orders o LEFT JOIN users u ON o.user_id = u.id WHERE o.id = ?");
-$stmt->bind_param("i", $order_id);
-$stmt->execute();
-$order_result = $stmt->get_result();
+$stmt = $pdo->prepare("SELECT o.*, u.name as customer_name, u.email FROM orders o LEFT JOIN users u ON o.user_id = u.id WHERE o.id = ?");
+$stmt->execute([$order_id]);
+$order = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if ($order_result->num_rows == 0) {
+if (!$order) {
     echo "<script>alert('Không tìm thấy đơn hàng!'); window.location.href='quanly_donhang.php';</script>";
     exit();
 }
 
-$order = $order_result->fetch_assoc();
-
 // Lấy danh sách sản phẩm trong đơn hàng
-$items_stmt = $conn->prepare("
+$items_stmt = $pdo->prepare("
     SELECT oi.*, 
            CASE 
                WHEN oi.product_type = 'sanpham' THEN (SELECT ten_sanpham FROM sanpham WHERE id = oi.product_id)
@@ -35,9 +32,15 @@ $items_stmt = $conn->prepare("
     FROM order_items oi 
     WHERE oi.order_id = ?
 ");
-$items_stmt->bind_param("i", $order_id);
-$items_stmt->execute();
-$items_result = $items_stmt->get_result();
+$items_stmt->execute([$order_id]);
+$items_result = $items_stmt->fetchAll(PDO::FETCH_ASSOC);
+
+$order_items = [];
+$subtotal = 0;
+foreach($items_result as $item) {
+    $order_items[] = $item;
+    $subtotal += $item['price'] * $item['quantity'];
+}
 ?>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
@@ -72,8 +75,15 @@ $items_result = $items_stmt->get_result();
             ?>
         </p>
         <?php if (!empty($order['voucher_code'])): ?>
-        <p style="margin-bottom: 10px;"><strong>Mã giảm giá áp dụng:</strong> <?php echo htmlspecialchars($order['voucher_code']); ?></p>
+        <p style="margin-bottom: 10px;"><strong>Mã giảm giá áp dụng:</strong> <span style="color:#ee4d2d; font-weight:bold;"><?php echo htmlspecialchars($order['voucher_code']); ?></span></p>
+        <div style="background-color: #fdf2f2; color: #c53030; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 14px; border-left: 4px solid #c53030;">
+            <i class="fas fa-check-circle"></i> Đã áp dụng mã giảm giá và trừ tiền vào đơn hàng của khách.
+        </div>
         <?php endif; ?>
+        <p style="margin-bottom: 10px;">
+            <strong>Miễn phí ship:</strong> 
+            <?php echo ($subtotal >= 100000) ? '<span style="color:#10b981; font-weight:600;"><i class="fas fa-check-circle"></i> Có (Đơn >= 100k)</span>' : '<span style="color:#ef4444; font-weight:600;"><i class="fas fa-times-circle"></i> Không (Đơn < 100k)</span>'; ?>
+        </p>
         <p style="margin-top: 15px; font-size: 18px;"><strong>Tổng Tiền:</strong> <span style="color:#ef4444; font-weight:bold;"><?php echo number_format($order['total'], 0, ',', '.'); ?>đ</span></p>
     </div>
 
@@ -94,11 +104,9 @@ $items_result = $items_stmt->get_result();
                 </thead>
                 <tbody>
                     <?php 
-                    $subtotal = 0;
-                    if($items_result->num_rows > 0): 
-                        while($item = $items_result->fetch_assoc()): 
+                    if(count($order_items) > 0): 
+                        foreach($order_items as $item): 
                             $item_total = $item['price'] * $item['quantity'];
-                            $subtotal += $item_total;
                     ?>
                         <tr>
                             <td>
@@ -120,7 +128,7 @@ $items_result = $items_stmt->get_result();
                             <td style="font-weight: 600; color: #1f2937;"><?php echo number_format($item_total, 0, ',', '.'); ?>đ</td>
                         </tr>
                     <?php 
-                        endwhile; 
+                        endforeach; 
                     else:
                     ?>
                         <tr><td colspan="6" style="text-align:center;">Không có dữ liệu sản phẩm</td></tr>

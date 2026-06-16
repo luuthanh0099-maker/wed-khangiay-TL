@@ -1,9 +1,53 @@
 <?php
 session_start();
-require_once '../config/db.php';
+require_once '../model/xl_data.php';
+
+$db = new xl_data();
+$pdo = $db->connection_database();
 
 $error = '';
 $success = '';
+
+// Hàm kiểm tra email có tồn tại trên Mail Server hay không (SMTP Ping)
+function verifyEmailExists($email) {
+    $domain = substr(strrchr($email, "@"), 1);
+    $mxhosts = array();
+    // Lấy bản ghi MX của tên miền
+    if(!@getmxrr($domain, $mxhosts) || empty($mxhosts)) {
+        return false;
+    }
+    
+    // Kết nối tới Mail Server đầu tiên
+    $mx = $mxhosts[0];
+    $connect = @fsockopen($mx, 25, $errno, $errstr, 5); // Timeout 5 giây
+    if(!$connect) return false;
+    
+    stream_set_timeout($connect, 5);
+    $out = fgets($connect, 1024); // Đọc dòng chào mừng 220
+    
+    // Gửi lệnh HELO
+    $host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost';
+    fputs($connect, "HELO $host\r\n");
+    $out = fgets($connect, 1024);
+    
+    // Gửi lệnh MAIL FROM
+    fputs($connect, "MAIL FROM: <noreply@$host>\r\n");
+    $out = fgets($connect, 1024);
+    
+    // Gửi lệnh RCPT TO để kiểm tra email
+    fputs($connect, "RCPT TO: <$email>\r\n");
+    $out = fgets($connect, 1024);
+    
+    // Đóng kết nối
+    fputs($connect, "QUIT\r\n");
+    fclose($connect);
+    
+    // Nếu Mail Server trả về 250 (OK), nghĩa là email tồn tại
+    if(strpos($out, "250") === 0) {
+        return true;
+    }
+    return false;
+}
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $fullname = trim($_POST['fullname']);
@@ -12,34 +56,46 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
 
-    if (empty($fullname) || empty($email) || empty($phone) || empty($password) || empty($confirm_password)) {
-        $error = "Vui lòng điền đầy đủ thông tin.";
+    // Lấy thông tin địa chỉ
+    $province_name = trim($_POST['province_name'] ?? '');
+    $ward_name = trim($_POST['ward_name'] ?? '');
+    $house = trim($_POST['house'] ?? '');
+    $full_address = '';
+    if (!empty($province_name) && !empty($ward_name) && !empty($house)) {
+        $full_address = "$house, $ward_name, $province_name";
+    }
+
+    if (empty($fullname) || empty($email) || empty($phone) || empty($password) || empty($confirm_password) || empty($full_address)) {
+        $error = "Vui lòng điền đầy đủ thông tin, bao gồm cả địa chỉ.";
     } elseif (!preg_match('/^[0-9]{10}$/', $phone)) {
         $error = "Số điện thoại không hợp lệ. Vui lòng nhập đúng 10 chữ số từ 0-9.";
     } elseif ($password !== $confirm_password) {
         $error = "Mật khẩu xác nhận không khớp.";
     } else {
-        // Kiểm tra email đã tồn tại chưa
-        $stmt_check = $conn->prepare("SELECT id FROM users WHERE email = ?");
-        $stmt_check->bind_param("s", $email);
-        $stmt_check->execute();
-        $res_check = $stmt_check->get_result();
-
-        if ($res_check->num_rows > 0) {
-            $error = "Email này đã được sử dụng. Vui lòng dùng email khác hoặc Đăng nhập.";
+        // Kiểm tra email tồn tại thật hay không qua SMTP
+        if (!verifyEmailExists($email)) {
+            $error = "Địa chỉ email không tồn tại hoặc không thể nhận thư. Vui lòng nhập email hợp lệ (VD: email thật của bạn).";
         } else {
-            // Đăng ký (Lưu mật khẩu trực tiếp dạng văn bản)
-            $stmt_insert = $conn->prepare("INSERT INTO users (name, email, phone, password) VALUES (?, ?, ?, ?)");
-            $stmt_insert->bind_param("ssss", $fullname, $email, $phone, $password);
-            
-            if ($stmt_insert->execute()) {
-                $_SESSION['flash_success'] = "Đăng ký tài khoản thành công! Hệ thống đã tự điền thông tin, bạn chỉ cần bấm Đăng nhập.";
-                $_SESSION['flash_email'] = $email;
-                $_SESSION['flash_password'] = $password;
-                header("Location: dangnhap.php");
-                exit();
+            // Kiểm tra email đã tồn tại chưa trong CSDL
+            $stmt_check = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+            $stmt_check->execute([$email]);
+            $res_check = $stmt_check->fetch(PDO::FETCH_ASSOC);
+
+            if ($res_check) {
+                $error = "Email này đã được sử dụng. Vui lòng dùng email khác hoặc Đăng nhập.";
             } else {
-                $error = "Đã xảy ra lỗi hệ thống, vui lòng thử lại sau.";
+                // Đăng ký (Lưu mật khẩu trực tiếp dạng văn bản)
+                $stmt_insert = $pdo->prepare("INSERT INTO users (name, email, phone, password, address) VALUES (?, ?, ?, ?, ?)");
+                
+                if ($stmt_insert->execute([$fullname, $email, $phone, $password, $full_address])) {
+                    $_SESSION['flash_success'] = "Đăng ký tài khoản thành công! Hệ thống đã tự điền thông tin, bạn chỉ cần bấm Đăng nhập.";
+                    $_SESSION['flash_email'] = $email;
+                    $_SESSION['flash_password'] = $password;
+                    header("Location: dangnhap.php");
+                    exit();
+                } else {
+                    $error = "Đã xảy ra lỗi hệ thống, vui lòng thử lại sau.";
+                }
             }
         }
     }
@@ -53,11 +109,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <title>Đăng ký tài khoản - TL</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/style.css?v=3">
+    <link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body class="bg-light">
 
-    <!-- Header Section -->
+    <!-- Phần Đầu Trang -->
     <header class="header">
         <div class="container header-container">
             <a href="index.php" class="logo">
@@ -136,6 +192,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     </div>
 
                     <div class="form-group">
+                        <label>Tỉnh/Thành phố</label>
+                        <select name="province" id="province" class="form-control" required>
+                            <option value="">Chọn Tỉnh/Thành phố</option>
+                        </select>
+                        <input type="hidden" name="province_name" id="province_name">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Phường/Xã</label>
+                        <select name="ward" id="ward" class="form-control" required disabled>
+                            <option value="">Chọn Phường/Xã</option>
+                        </select>
+                        <input type="hidden" name="ward_name" id="ward_name">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Số nhà/Tên đường</label>
+                        <input type="text" name="house" id="house" class="form-control" required placeholder="VD: Số 123 Đường Nguyễn Trãi" value="<?php echo isset($_POST['house']) ? htmlspecialchars($_POST['house']) : ''; ?>">
+                    </div>
+
+                    <div class="form-group">
                         <label>Mật khẩu</label>
                         <input type="password" name="password" class="form-control" required>
                     </div>
@@ -156,5 +233,86 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </main>
 
     <?php include 'chantrang.php'; ?>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const provinceSelect = document.getElementById('province');
+            const wardSelect = document.getElementById('ward');
+            const provinceName = document.getElementById('province_name');
+            const wardName = document.getElementById('ward_name');
+
+            // Load provinces
+            fetch('https://provinces.open-api.vn/api/p/')
+                .then(res => res.json())
+                .then(data => {
+                    data.forEach(province => {
+                        const option = document.createElement('option');
+                        option.value = province.code;
+                        option.textContent = province.name;
+                        provinceSelect.appendChild(option);
+                    });
+                })
+                .catch(err => console.error('Error loading provinces:', err));
+
+            // On province change
+            provinceSelect.addEventListener('change', function() {
+                const provinceCode = this.value;
+                if(this.selectedIndex > 0) {
+                    provinceName.value = this.options[this.selectedIndex].text;
+                } else {
+                    provinceName.value = '';
+                }
+                
+                // Reset ward select
+                wardSelect.innerHTML = '<option value="">Đang tải...</option>';
+                wardSelect.disabled = true;
+                wardName.value = '';
+
+                if (provinceCode) {
+                    // Fetch province with depth=3 to get all wards
+                    fetch(`https://provinces.open-api.vn/api/p/${provinceCode}?depth=3`)
+                        .then(res => res.json())
+                        .then(data => {
+                            wardSelect.innerHTML = '<option value="">Chọn Phường/Xã</option>';
+                            if (data.districts) {
+                                // Gộp tất cả wards từ tất cả các districts và nối thêm tên Quận/Huyện để tránh trùng lặp
+                                const allWards = data.districts.flatMap(d => 
+                                    d.wards.map(w => ({
+                                        code: w.code,
+                                        name: w.name + ' (' + d.name + ')'
+                                    }))
+                                );
+                                
+                                // Sort theo tên
+                                allWards.sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+
+                                allWards.forEach(ward => {
+                                    const option = document.createElement('option');
+                                    option.value = ward.code;
+                                    option.textContent = ward.name;
+                                    wardSelect.appendChild(option);
+                                });
+                            }
+                            wardSelect.disabled = false;
+                        })
+                        .catch(err => {
+                            console.error('Error loading wards:', err);
+                            wardSelect.innerHTML = '<option value="">Lỗi tải dữ liệu</option>';
+                        });
+                } else {
+                    wardSelect.innerHTML = '<option value="">Chọn Phường/Xã</option>';
+                    wardSelect.disabled = true;
+                }
+            });
+
+            // On ward change
+            wardSelect.addEventListener('change', function() {
+                if(this.selectedIndex > 0) {
+                    wardName.value = this.options[this.selectedIndex].text;
+                } else {
+                    wardName.value = '';
+                }
+            });
+        });
+    </script>
 </body>
 </html>

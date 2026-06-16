@@ -1,7 +1,9 @@
 <?php
 session_start();
-require_once '../config/db.php';
-$conn->set_charset("utf8mb4");
+require_once '../model/xl_data.php';
+
+$db = new xl_data();
+$pdo = $db->connection_database();
 
 header('Content-Type: application/json');
 
@@ -16,17 +18,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     // Lấy thông tin sản phẩm từ CSDL
     if ($type === 'sanpham') {
-        $stmt = $conn->prepare("SELECT ten_sanpham as name, gia as price, hinhanh as img, so_luong FROM sanpham WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT ten_sanpham as name, gia as price, hinhanh as img, so_luong FROM sanpham WHERE id = ?");
     } else {
-        $stmt = $conn->prepare("SELECT ten_phukien as name, gia as price, hinhanh as img, so_luong FROM phukien WHERE id = ?");
+        $stmt = $pdo->prepare("SELECT ten_phukien as name, gia as price, hinhanh as img, so_luong FROM phukien WHERE id = ?");
     }
     
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    $result = $stmt->get_result();
+    $stmt->execute([$id]);
+    $item = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($result->num_rows > 0) {
-        $item = $result->fetch_assoc();
+    if ($item) {
         
         // Khởi tạo giỏ hàng nếu chưa có
         if (!isset($_SESSION['cart'])) {

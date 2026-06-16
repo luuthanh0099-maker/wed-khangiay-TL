@@ -4,7 +4,7 @@ include 'includes/header.php';
 // Xóa đánh giá
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action']) && $_POST['action'] == 'delete') {
     $id = intval($_POST['id']);
-    $conn->query("DELETE FROM reviews WHERE id = $id");
+    $pdo->exec("DELETE FROM reviews WHERE id = $id");
     echo "<script>alert('Đã xóa đánh giá thành công!'); window.location.href='quanly_danhgia.php';</script>";
     exit();
 }
@@ -19,7 +19,7 @@ $sql = "
     JOIN users u ON r.user_id = u.id
     ORDER BY r.created_at DESC
 ";
-$reviews = $conn->query($sql);
+$reviews = $pdo->query($sql)->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
@@ -40,8 +40,8 @@ $reviews = $conn->query($sql);
             </tr>
         </thead>
         <tbody>
-            <?php if($reviews && $reviews->num_rows > 0): ?>
-                <?php while($row = $reviews->fetch_assoc()): ?>
+            <?php if(count($reviews) > 0): ?>
+                <?php foreach($reviews as $row): ?>
                 <tr>
                     <td><?php echo $row['id']; ?></td>
                     <td><strong><?php echo htmlspecialchars($row['user_name']); ?></strong></td>
@@ -73,7 +73,7 @@ $reviews = $conn->query($sql);
                         </form>
                     </td>
                 </tr>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
             <?php else: ?>
                 <tr><td colspan="7" style="text-align:center;">Chưa có đánh giá nào</td></tr>
             <?php endif; ?>

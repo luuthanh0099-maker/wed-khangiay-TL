@@ -1,6 +1,9 @@
 <?php
 session_start();
-require_once '../config/db.php';
+require_once '../model/xl_data.php';
+
+$db = new xl_data();
+$pdo = $db->connection_database();
 
 $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 $accessory = null;
@@ -12,9 +15,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SESSION['user_id']) && isse
     $user_id = $_SESSION['user_id'];
     
     if (!empty($content)) {
-        $stmt = $conn->prepare("INSERT INTO reviews (user_id, item_id, item_type, rating, comment) VALUES (?, ?, 'phukien', ?, ?)");
-        $stmt->bind_param("iiis", $user_id, $id, $rating, $content);
-        $stmt->execute();
+        $stmt = $pdo->prepare("INSERT INTO reviews (user_id, item_id, item_type, rating, comment) VALUES (?, ?, 'phukien', ?, ?)");
+        $stmt->execute([$user_id, $id, $rating, $content]);
         header("Location: chitiet_phukien.php?id=" . $id);
         exit();
     }
@@ -23,26 +25,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_SESSION['user_id']) && isse
 // Lấy danh sách đánh giá
 $reviews = [];
 if ($id > 0) {
-    $stmt_reviews = $conn->prepare("SELECT r.*, u.name as user_name FROM reviews r JOIN users u ON r.user_id = u.id WHERE r.item_id = ? AND r.item_type = 'phukien' ORDER BY r.created_at DESC");
-    $stmt_reviews->bind_param("i", $id);
-    $stmt_reviews->execute();
-    $res_reviews = $stmt_reviews->get_result();
-    while ($row = $res_reviews->fetch_assoc()) {
-        $reviews[] = $row;
-    }
+    $stmt_reviews = $pdo->prepare("SELECT r.*, u.name as user_name FROM reviews r JOIN users u ON r.user_id = u.id WHERE r.item_id = ? AND r.item_type = 'phukien' ORDER BY r.created_at DESC");
+    $stmt_reviews->execute([$id]);
+    $reviews = $stmt_reviews->fetchAll(PDO::FETCH_ASSOC);
 }
 
 
 if ($id > 0) {
     // Truy vấn phụ kiện theo ID
-    $stmt = $conn->prepare("SELECT * FROM phukien WHERE id = ?");
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    $result = $stmt->get_result();
+    $stmt = $pdo->prepare("SELECT * FROM phukien WHERE id = ?");
+    $stmt->execute([$id]);
+    $accessory = $stmt->fetch(PDO::FETCH_ASSOC);
     
-    if ($result->num_rows > 0) {
-        $accessory = $result->fetch_assoc();
-    } else {
+    if (!$accessory) {
         die("Không tìm thấy phụ kiện.");
     }
 } else {
@@ -57,10 +52,10 @@ if ($id > 0) {
     <title><?php echo htmlspecialchars($accessory['ten_phukien']); ?> - TL</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/style.css?v=4">
+    <link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body>
-    <!-- Header Section -->
+    <!-- Phần Đầu Trang -->
     <header class="header">
         <div class="container header-container">
             <a href="index.php" class="logo">
@@ -77,15 +72,19 @@ if ($id > 0) {
                 </ul>
             </nav>
             <div class="header-actions">
-                                <div class="action-icon search-icon" id="search-icon-container">
-                    <i class="fa-solid fa-magnifying-glass"></i>
+                <div class="action-icon search-icon" id="search-icon-container">
                     <!-- Khung Tìm Kiếm Dropdown -->
-                    <div class="search-dropdown" id="search-dropdown">
-                        <input type="text" id="search-input" placeholder="Tìm kiếm sản phẩm">
-                        <div class="search-results" id="search-results">
-                            <!-- Kết quả AJAX sẽ hiện ở đây -->
+                    <form action="sanphamcantim.php" method="GET" class="search-form" style="margin: 0; width: 100%;">
+                        <div class="search-dropdown" id="search-dropdown">
+                            <input type="text" name="q" id="search-input" placeholder="bạn tìm gì ?" autocomplete="off" required>
+                            <button type="submit" class="search-submit-btn">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                            </button>
+                            <div class="search-results" id="search-results">
+                                <!-- Kết quả AJAX sẽ hiện ở đây -->
+                            </div>
                         </div>
-                    </div>
+                    </form>
                 </div>
                 <a href="giohang.php" class="action-icon cart-icon">
                     <i class="fa-solid fa-basket-shopping"></i>

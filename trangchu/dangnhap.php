@@ -1,6 +1,9 @@
 <?php
 session_start();
-require_once '../config/db.php';
+require_once '../model/xl_data.php';
+
+$db = new xl_data();
+$pdo = $db->connection_database();
 
 // Nếu người dùng đã đăng nhập, chuyển hướng về trang chủ
 if (isset($_SESSION['user_id'])) {
@@ -33,13 +36,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $error = "Vui lòng nhập Email và Mật khẩu.";
     } else {
         // Tìm user trong Database
-        $stmt = $conn->prepare("SELECT id, name, password FROM users WHERE email = ?");
-        $stmt->bind_param("s", $email);
-        $stmt->execute();
-        $result = $stmt->get_result();
+        $stmt = $pdo->prepare("SELECT id, name, password FROM users WHERE email = ?");
+        $stmt->execute([$email]);
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($result->num_rows === 1) {
-            $user = $result->fetch_assoc();
+        if ($user) {
             // Kiểm tra mật khẩu trực tiếp (Plain text)
             if ($password === $user['password']) {
                 // Đăng nhập thành công -> Lưu Session
@@ -64,11 +65,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <title>Đăng nhập - TL</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/style.css?v=3">
+    <link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body class="bg-light">
 
-    <!-- Header Section -->
+    <!-- Phần Đầu Trang -->
     <header class="header">
         <div class="container header-container">
             <a href="index.php" class="logo">

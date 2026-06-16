@@ -4,9 +4,8 @@ include 'includes/header.php';
 // Xử lý Xóa
 if (isset($_GET['delete'])) {
     $id = intval($_GET['delete']);
-    $stmt = $conn->prepare("DELETE FROM tintuc WHERE id = ?");
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
+    $stmt = $pdo->prepare("DELETE FROM tintuc WHERE id = ?");
+    $stmt->execute([$id]);
     echo "<script>alert('Đã xóa thành công!'); window.location.href='quanly_tintuc.php';</script>";
     exit();
 }
@@ -20,22 +19,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     $expiry_date = !empty($_POST['expiry_date']) ? $_POST['expiry_date'] : null;
     $quantity = !empty($_POST['quantity']) ? intval($_POST['quantity']) : null;
 
-    $stmt = $conn->prepare("INSERT INTO tintuc (type, title, content, discount_percent, expiry_date, quantity) VALUES (?, ?, ?, ?, ?, ?)");
-    $stmt->bind_param("sssisi", $type, $title, $content, $discount_percent, $expiry_date, $quantity);
-    $stmt->execute();
+    $stmt = $pdo->prepare("INSERT INTO tintuc (type, title, content, discount_percent, expiry_date, quantity) VALUES (?, ?, ?, ?, ?, ?)");
+    $stmt->execute([$type, $title, $content, $discount_percent, $expiry_date, $quantity]);
     echo "<script>alert('Đã thêm tin tức/khuyến mãi mới!'); window.location.href='quanly_tintuc.php';</script>";
     exit();
 }
 
-$tintucList = $conn->query("SELECT * FROM tintuc ORDER BY type, id DESC");
+$tintucList = $pdo->query("SELECT * FROM tintuc ORDER BY type, id DESC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
-<style>
-.form-group { margin-bottom: 15px; }
-.form-group label { display: block; font-weight: 500; margin-bottom: 5px; color: #374151; }
-.form-control { width: 100%; padding: 10px; border: 1px solid #d1d5db; border-radius: 4px; }
-.voucher-fields, .khuyenmai-fields { display: none; }
-</style>
+
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
     <h2 style="color: #1f2937;">Quản Lý Tin Tức & Voucher</h2>
@@ -49,7 +42,7 @@ $tintucList = $conn->query("SELECT * FROM tintuc ORDER BY type, id DESC");
         
         <div class="form-group">
             <label>Loại bản tin</label>
-            <select name="type" id="type" class="form-control" onchange="toggleFields()">
+            <select name="type" id="type" class="form-control">
                 <option value="khuyenmai">Chương trình khuyến mãi</option>
                 <option value="voucher">Voucher khuyến mãi</option>
                 <option value="thongbao">Thông báo</option>
@@ -100,8 +93,8 @@ $tintucList = $conn->query("SELECT * FROM tintuc ORDER BY type, id DESC");
             </tr>
         </thead>
         <tbody>
-            <?php if($tintucList->num_rows > 0): ?>
-                <?php while($row = $tintucList->fetch_assoc()): ?>
+            <?php if(count($tintucList) > 0): ?>
+                <?php foreach($tintucList as $row): ?>
                 <tr>
                     <td><?php echo $row['id']; ?></td>
                     <td>
@@ -112,7 +105,7 @@ $tintucList = $conn->query("SELECT * FROM tintuc ORDER BY type, id DESC");
                             if($row['type'] == 'voucher') { $type_color = '#16a34a'; $type_name = 'Voucher'; }
                             if($row['type'] == 'thongbao') { $type_color = '#d97706'; $type_name = 'Thông báo'; }
                         ?>
-                        <span style="color: <?php echo $type_color; ?>; font-weight: bold;"><?php echo strtoupper($type_name); ?></span>
+                        <span style="color: <?php echo $type_color; ?>; font-weight: bold;"><?php echo mb_strtoupper($type_name, 'UTF-8'); ?></span>
                     </td>
                     <td>
                         <strong style="display:block; margin-bottom:5px;"><?php echo htmlspecialchars($row['title']); ?></strong>
@@ -128,10 +121,11 @@ $tintucList = $conn->query("SELECT * FROM tintuc ORDER BY type, id DESC");
                         <?php endif; ?>
                     </td>
                     <td>
-                        <a href="?delete=<?php echo $row['id']; ?>" class="btn" style="background:#ef4444; color:#fff;" onclick="return confirm('Bạn có chắc chắn muốn xóa?')">Xóa</a>
+                        <a href="sua_tintuc.php?id=<?php echo $row['id']; ?>" class="btn" style="background:#3b82f6; color:#fff; margin-right: 5px;">Sửa</a>
+                        <a href="?delete=<?php echo $row['id']; ?>" class="btn btn-delete-confirm" style="background:#ef4444; color:#fff;" data-confirm-msg="Bạn có chắc chắn muốn xóa?">Xóa</a>
                     </td>
                 </tr>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
             <?php else: ?>
                 <tr><td colspan="5" style="text-align: center;">Chưa có dữ liệu.</td></tr>
             <?php endif; ?>
@@ -139,19 +133,6 @@ $tintucList = $conn->query("SELECT * FROM tintuc ORDER BY type, id DESC");
     </table>
 </div>
 
-<script>
-function toggleFields() {
-    var type = document.getElementById('type').value;
-    document.querySelectorAll('.voucher-fields, .khuyenmai-fields, .thongbao-fields').forEach(el => el.style.display = 'none');
-    if(type === 'khuyenmai') {
-        document.querySelectorAll('.khuyenmai-fields').forEach(el => el.style.display = 'block');
-    } else if(type === 'voucher') {
-        document.querySelectorAll('.voucher-fields').forEach(el => el.style.display = 'block');
-    } else if(type === 'thongbao') {
-        document.querySelectorAll('.thongbao-fields').forEach(el => el.style.display = 'block');
-    }
-}
-window.onload = toggleFields;
-</script>
+<script src="js/quanly_tintuc.js"></script>
 
 <?php include 'includes/footer.php'; ?>

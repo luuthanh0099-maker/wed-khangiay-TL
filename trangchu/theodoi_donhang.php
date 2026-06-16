@@ -1,6 +1,9 @@
 <?php
 session_start();
-require_once '../config/db.php';
+require_once '../model/xl_data.php';
+
+$db = new xl_data();
+$pdo = $db->connection_database();
 
 // Kiểm tra đăng nhập
 if (!isset($_SESSION['user_id'])) {
@@ -11,20 +14,14 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = $_SESSION['user_id'];
 
 // Lấy thông tin khách hàng từ DB
-$stmt_user = $conn->prepare("SELECT name, email, phone FROM users WHERE id = ?");
-$stmt_user->bind_param("i", $user_id);
-$stmt_user->execute();
-$user_info = $stmt_user->get_result()->fetch_assoc();
+$stmt_user = $pdo->prepare("SELECT name, email, phone FROM users WHERE id = ?");
+$stmt_user->execute([$user_id]);
+$user_info = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
 // Lấy danh sách đơn hàng
-$orders = [];
-$stmt = $conn->prepare("SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$res = $stmt->get_result();
-while ($row = $res->fetch_assoc()) {
-    $orders[] = $row;
-}
+$stmt = $pdo->prepare("SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC");
+$stmt->execute([$user_id]);
+$orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="vi">
@@ -34,138 +31,11 @@ while ($row = $res->fetch_assoc()) {
     <title>Theo dõi quá trình giao hàng - TL</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/style.css?v=3">
-    <style>
-        .tracking-container {
-            max-width: 1000px;
-            margin: 40px auto;
-            padding: 0 20px;
-        }
-        .tracking-title {
-            font-size: 24px;
-            margin-bottom: 20px;
-            color: #333;
-        }
-        .order-card {
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            margin-bottom: 30px;
-            padding: 30px;
-            border-left: 5px solid #1b8a44;
-        }
-        .order-card.cancelled {
-            border-left-color: #ee4d2d;
-        }
-        .order-header {
-            display: flex;
-            justify-content: space-between;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 15px;
-            margin-bottom: 30px;
-        }
-        .order-id {
-            font-weight: bold;
-            font-size: 18px;
-            color: #1b8a44;
-        }
-        .order-date {
-            color: #666;
-            font-size: 14px;
-        }
-        
-        /* Progress Bar Styles */
-        .track {
-            position: relative;
-            background-color: #ddd;
-            height: 7px;
-            display: flex;
-            margin-bottom: 20px;
-            margin-top: 40px;
-            border-radius: 5px;
-        }
-        .track .step {
-            flex-grow: 1;
-            width: 25%;
-            margin-top: -18px;
-            text-align: center;
-            position: relative;
-        }
-        .track .step::before {
-            height: 7px;
-            position: absolute;
-            content: "";
-            width: 100%;
-            left: 0;
-            top: 18px;
-            background-color: #ddd;
-            z-index: 0;
-        }
-        .track .step.active::before {
-            background: #1b8a44;
-        }
-        .track .step:first-child::before {
-            border-top-left-radius: 5px;
-            border-bottom-left-radius: 5px;
-        }
-        .track .step:last-child::before {
-            border-top-right-radius: 5px;
-            border-bottom-right-radius: 5px;
-        }
-        .track .icon {
-            display: inline-block;
-            width: 40px;
-            height: 40px;
-            line-height: 40px;
-            position: relative;
-            border-radius: 100%;
-            background: #ddd;
-            color: #fff;
-            z-index: 1;
-        }
-        .track .step.active .icon {
-            background: #1b8a44;
-        }
-        .track .text {
-            display: block;
-            margin-top: 7px;
-            color: #999;
-            font-size: 14px;
-        }
-        .track .step.active .text {
-            font-weight: 600;
-            color: #333;
-        }
-        
-        .cancelled-track {
-            text-align: center;
-            color: #ee4d2d;
-            font-size: 18px;
-            font-weight: bold;
-            padding: 20px 0;
-            background: #fdf2f2;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        .cancelled-track i {
-            margin-right: 8px;
-            font-size: 24px;
-        }
-        
-        .delivery-estimate {
-            background: #e8f5e9;
-            padding: 15px;
-            border-radius: 8px;
-            color: #2e7d32;
-            font-weight: 500;
-            text-align: center;
-            margin-top: 30px;
-            border: 1px solid #c8e6c9;
-        }
-    </style>
+    <link rel="stylesheet" href="css/style.css?v=11">
+
 </head>
 <body class="bg-light">
-    <!-- Header Section -->
+    <!-- Phần Đầu Trang -->
     <header class="header">
         <div class="container header-container">
             <a href="index.php" class="logo">
@@ -237,7 +107,7 @@ while ($row = $res->fetch_assoc()) {
                             <i class="fas fa-times-circle"></i> Đơn hàng này đã bị hủy
                         </div>
                     <?php else: ?>
-                        <!-- Progress Tracking -->
+                        <!-- Theo Dõi Tiến Độ -->
                         <div class="track">
                             <div class="step <?php echo ($step >= 1) ? 'active' : ''; ?>">
                                 <span class="icon"><i class="fas fa-clipboard-list"></i></span>

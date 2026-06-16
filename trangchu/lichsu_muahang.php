@@ -1,6 +1,9 @@
 <?php
 session_start();
-require_once '../config/db.php';
+require_once '../model/xl_data.php';
+
+$db = new xl_data();
+$pdo = $db->connection_database();
 
 // Kiểm tra đăng nhập
 if (!isset($_SESSION['user_id'])) {
@@ -11,38 +14,35 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = $_SESSION['user_id'];
 
 // Lấy thông tin khách hàng từ DB
-$stmt_user = $conn->prepare("SELECT name, email, phone FROM users WHERE id = ?");
-$stmt_user->bind_param("i", $user_id);
-$stmt_user->execute();
-$user_info = $stmt_user->get_result()->fetch_assoc();
+$stmt_user = $pdo->prepare("SELECT name, email, phone FROM users WHERE id = ?");
+$stmt_user->execute([$user_id]);
+$user_info = $stmt_user->fetch(PDO::FETCH_ASSOC);
 
 // Xử lý Hủy đơn hàng
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['action'] == 'cancel_order') {
     $order_id = intval($_POST['order_id']);
     
     // Kiểm tra xem đơn hàng có thuộc về user hiện tại và có trạng thái pending không
-    $check_stmt = $conn->prepare("SELECT id FROM orders WHERE id = ? AND user_id = ? AND status = 'pending'");
-    $check_stmt->bind_param("ii", $order_id, $user_id);
-    $check_stmt->execute();
-    $check_res = $check_stmt->get_result();
+    $check_stmt = $pdo->prepare("SELECT id FROM orders WHERE id = ? AND user_id = ? AND status = 'pending'");
+    $check_stmt->execute([$order_id, $user_id]);
+    $check_res = $check_stmt->fetch(PDO::FETCH_ASSOC);
     
-    if ($check_res->num_rows > 0) {
+    if ($check_res) {
         // Cập nhật trạng thái
-        $conn->query("UPDATE orders SET status = 'cancelled' WHERE id = $order_id");
+        $pdo->exec("UPDATE orders SET status = 'cancelled' WHERE id = $order_id");
         
         // Hoàn trả số lượng
-        $items_stmt = $conn->prepare("SELECT product_id, quantity, product_type FROM order_items WHERE order_id = ?");
-        $items_stmt->bind_param("i", $order_id);
-        $items_stmt->execute();
-        $items_res = $items_stmt->get_result();
+        $items_stmt = $pdo->prepare("SELECT product_id, quantity, product_type FROM order_items WHERE order_id = ?");
+        $items_stmt->execute([$order_id]);
+        $items_res = $items_stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        while ($item = $items_res->fetch_assoc()) {
+        foreach ($items_res as $item) {
             $pid = intval($item['product_id']);
             $qty = intval($item['quantity']);
             if ($item['product_type'] == 'sanpham') {
-                $conn->query("UPDATE sanpham SET so_luong = so_luong + $qty WHERE id = $pid");
+                $pdo->exec("UPDATE sanpham SET so_luong = so_luong + $qty WHERE id = $pid");
             } else {
-                $conn->query("UPDATE phukien SET so_luong = so_luong + $qty WHERE id = $pid");
+                $pdo->exec("UPDATE phukien SET so_luong = so_luong + $qty WHERE id = $pid");
             }
         }
         $msg = "Hủy đơn hàng thành công!";
@@ -57,32 +57,30 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['action']) && $_POST['a
 
 // Lấy danh sách đơn hàng
 $orders = [];
-$stmt = $conn->prepare("SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$res = $stmt->get_result();
-while ($row = $res->fetch_assoc()) {
+$stmt = $pdo->prepare("SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC");
+$stmt->execute([$user_id]);
+$res = $stmt->fetchAll(PDO::FETCH_ASSOC);
+foreach ($res as $row) {
     $order_id = $row['id'];
     
     // Lấy order items
     $items = [];
-    $item_stmt = $conn->prepare("SELECT * FROM order_items WHERE order_id = ?");
-    $item_stmt->bind_param("i", $order_id);
-    $item_stmt->execute();
-    $item_res = $item_stmt->get_result();
-    while ($i = $item_res->fetch_assoc()) {
+    $item_stmt = $pdo->prepare("SELECT * FROM order_items WHERE order_id = ?");
+    $item_stmt->execute([$order_id]);
+    $item_res = $item_stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($item_res as $i) {
         // Lấy tên sản phẩm
         $pid = intval($i['product_id']);
         $name = "Sản phẩm không tồn tại";
         if ($i['product_type'] == 'sanpham') {
-            $name_res = $conn->query("SELECT ten_sanpham FROM sanpham WHERE id = $pid");
-            if ($name_res && $name_res->num_rows > 0) {
-                $name = $name_res->fetch_assoc()['ten_sanpham'];
+            $name_res = $db->readitem("SELECT ten_sanpham FROM sanpham WHERE id = $pid");
+            if (!empty($name_res)) {
+                $name = $name_res[0]['ten_sanpham'];
             }
         } else {
-            $name_res = $conn->query("SELECT ten_phukien FROM phukien WHERE id = $pid");
-            if ($name_res && $name_res->num_rows > 0) {
-                $name = $name_res->fetch_assoc()['ten_phukien'];
+            $name_res = $db->readitem("SELECT ten_phukien FROM phukien WHERE id = $pid");
+            if (!empty($name_res)) {
+                $name = $name_res[0]['ten_phukien'];
             }
         }
         $i['product_name'] = $name;
@@ -101,125 +99,10 @@ while ($row = $res->fetch_assoc()) {
     <title>Lịch sử mua hàng - TL</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/style.css?v=3">
-    <style>
-        .history-container {
-            max-width: 1000px;
-            margin: 40px auto;
-            padding: 0 20px;
-        }
-        .history-title {
-            font-size: 24px;
-            margin-bottom: 20px;
-            color: #333;
-        }
-        .order-card {
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            margin-bottom: 20px;
-            padding: 20px;
-            border-left: 5px solid #1b8a44;
-        }
-        .order-card.cancelled {
-            border-left-color: #ee4d2d;
-        }
-        .order-header {
-            display: flex;
-            justify-content: space-between;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 15px;
-            margin-bottom: 15px;
-        }
-        .order-id {
-            font-weight: bold;
-            font-size: 18px;
-            color: #1b8a44;
-        }
-        .order-date {
-            color: #666;
-            font-size: 14px;
-        }
-        .order-status {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 13px;
-            font-weight: 500;
-        }
-        .status-pending { background: #fff3cd; color: #856404; }
-        .status-cancelled { background: #f8d7da; color: #721c24; }
-        .status-confirmed { background: #d4edda; color: #155724; }
-        
-        .order-body {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .order-total {
-            font-size: 18px;
-        }
-        .order-total strong {
-            color: #ee4d2d;
-            font-size: 20px;
-        }
-        .order-actions {
-            display: flex;
-            gap: 10px;
-        }
-        .btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.2s;
-        }
-        .btn-detail {
-            background: #e0f2f1;
-            color: #00796b;
-        }
-        .btn-detail:hover { background: #b2dfdb; }
-        
-        .btn-cancel {
-            background: #ffebee;
-            color: #c62828;
-        }
-        .btn-cancel:hover { background: #ffcdd2; }
-
-        /* Modal Styles */
-        .modal-overlay {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5); z-index: 1000;
-        }
-        .modal-content {
-            display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: #fff; width: 600px; max-width: 90%; border-radius: 8px; z-index: 1001;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-            max-height: 90vh; overflow-y: auto;
-        }
-        .modal-header {
-            padding: 15px 20px; border-bottom: 1px solid #eee;
-            display: flex; justify-content: space-between; align-items: center;
-        }
-        .modal-header h3 { margin: 0; font-size: 18px; color: #333; }
-        .modal-close { cursor: pointer; font-size: 20px; color: #888; }
-        .modal-body { padding: 20px; }
-        .detail-section { margin-bottom: 20px; }
-        .detail-section h4 { margin: 0 0 10px 0; color: #1b8a44; border-bottom: 1px dashed #ccc; padding-bottom: 5px; }
-        .detail-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
-        .detail-product-list { list-style: none; padding: 0; margin: 0; }
-        .detail-product-list li {
-            display: flex; justify-content: space-between;
-            padding: 10px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 8px;
-            background: #fafafa;
-        }
-        .prod-name { font-weight: 500; color: #333; }
-        .prod-qty { color: #666; font-size: 13px; }
-        .prod-price { color: #ee4d2d; font-weight: 500; }
-    </style>
+    <link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body class="bg-light">
-    <!-- Header Section -->
+    <!-- Phần Đầu Trang -->
     <header class="header">
         <div class="container header-container">
             <a href="index.php" class="logo">
@@ -330,7 +213,7 @@ while ($row = $res->fetch_assoc()) {
             <div class="detail-section">
                 <h4>Sản phẩm đã mua</h4>
                 <ul class="detail-product-list" id="modalProductList">
-                    <!-- Products will be injected here via JS -->
+                    <!-- Sản phẩm sẽ được hiển thị ở đây qua JS -->
                 </ul>
                 <div style="text-align: right; margin-top: 15px; font-size: 16px;">
                     Tổng thanh toán: <strong id="modalTotal" style="color: #ee4d2d; font-size: 22px;"></strong>
@@ -344,47 +227,7 @@ while ($row = $res->fetch_assoc()) {
     </div>
 
     <script src="js/main.js?v=1779356416"></script>
-    <script>
-        function openDetailModal(orderData) {
-            document.getElementById('modalOrderId').innerText = '#' + orderData.id;
-            document.getElementById('modalPhone').innerText = orderData.phone;
-            document.getElementById('modalAddress').innerText = orderData.shipping_address;
-            
-            // Format Date
-            let dateObj = new Date(orderData.created_at);
-            let formattedDate = ('0' + dateObj.getDate()).slice(-2) + '/' + ('0' + (dateObj.getMonth()+1)).slice(-2) + '/' + dateObj.getFullYear() + ' ' + ('0' + dateObj.getHours()).slice(-2) + ':' + ('0' + dateObj.getMinutes()).slice(-2);
-            document.getElementById('modalDate').innerText = formattedDate;
-            
-            // Format Total
-            document.getElementById('modalTotal').innerText = new Intl.NumberFormat('vi-VN').format(orderData.total) + ' đ';
-
-            // Populate Products
-            let productListHtml = '';
-            if (orderData.items && orderData.items.length > 0) {
-                orderData.items.forEach(item => {
-                    let priceFormatted = new Intl.NumberFormat('vi-VN').format(item.price);
-                    productListHtml += `
-                        <li>
-                            <div class="prod-name">${item.product_name} <br><span class="prod-qty">x${item.quantity}</span></div>
-                            <div class="prod-price">${priceFormatted} đ</div>
-                        </li>
-                    `;
-                });
-            } else {
-                productListHtml = '<li><div class="prod-name" style="color:#ee4d2d;">Không tìm thấy chi tiết sản phẩm (Lỗi lưu trữ)</div></li>';
-            }
-            document.getElementById('modalProductList').innerHTML = productListHtml;
-
-            // Show Modal
-            document.getElementById('detailModalOverlay').style.display = 'block';
-            document.getElementById('detailModal').style.display = 'block';
-        }
-
-        function closeDetailModal() {
-            document.getElementById('detailModalOverlay').style.display = 'none';
-            document.getElementById('detailModal').style.display = 'none';
-        }
-    </script>
+    <script src="js/lichsu_muahang.js"></script>
     <?php include 'chantrang.php'; ?>
 </body>
 </html>

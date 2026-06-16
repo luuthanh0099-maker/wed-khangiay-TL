@@ -25,22 +25,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($qty > 0 && isset($_SESSION['cart'][$key])) {
             
             // Lấy thông tin kho để kiểm tra
-            require_once '../config/db.php';
+            require_once '../model/xl_data.php';
+            $db = new xl_data();
+            $pdo = $db->connection_database();
             $type_id = explode('_', $key);
             $type = $type_id[0];
             $id = intval($type_id[1]);
             
             $stock = 0;
             if ($type === 'sanpham') {
-                $stmt = $conn->prepare("SELECT so_luong FROM sanpham WHERE id = ?");
+                $stmt = $pdo->prepare("SELECT so_luong FROM sanpham WHERE id = ?");
             } else {
-                $stmt = $conn->prepare("SELECT so_luong FROM phukien WHERE id = ?");
+                $stmt = $pdo->prepare("SELECT so_luong FROM phukien WHERE id = ?");
             }
-            $stmt->bind_param("i", $id);
-            $stmt->execute();
-            $res = $stmt->get_result();
-            if ($res->num_rows > 0) {
-                $stock = $res->fetch_assoc()['so_luong'];
+            $stmt->execute([$id]);
+            $res = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($res) {
+                $stock = $res['so_luong'];
             }
             
             if ($qty > $stock) {

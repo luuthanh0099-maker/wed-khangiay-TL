@@ -2,30 +2,30 @@
 include 'includes/header.php';
 
 // Tổng doanh thu (Chỉ tính đơn đã thanh toán hoặc hoàn thành)
-$rev_res = $conn->query("SELECT SUM(total) as revenue FROM orders WHERE status IN ('confirmed', 'shipping', 'delivered')");
-$revenue = $rev_res->fetch_assoc()['revenue'] ?? 0;
+$rev_res = $pdo->query("SELECT SUM(total) as revenue FROM orders WHERE status IN ('confirmed', 'shipping', 'delivered')");
+$revenue = $rev_res->fetch(PDO::FETCH_ASSOC)['revenue'] ?? 0;
 
 // Tổng số đơn hàng
-$ord_res = $conn->query("SELECT COUNT(id) as total_orders FROM orders");
-$total_orders = $ord_res->fetch_assoc()['total_orders'] ?? 0;
+$ord_res = $pdo->query("SELECT COUNT(id) as total_orders FROM orders");
+$total_orders = $ord_res->fetch(PDO::FETCH_ASSOC)['total_orders'] ?? 0;
 
 // Tổng số khách hàng
-$usr_res = $conn->query("SELECT COUNT(id) as total_users FROM users WHERE role = 'user'");
-$total_users = $usr_res->fetch_assoc()['total_users'] ?? 0;
+$usr_res = $pdo->query("SELECT COUNT(id) as total_users FROM users WHERE role = 'user'");
+$total_users = $usr_res->fetch(PDO::FETCH_ASSOC)['total_users'] ?? 0;
 
 // Cảnh báo hết hàng (Sản phẩm & Phụ kiện <= 20)
-$stock_res = $conn->query("SELECT ((SELECT COUNT(id) FROM sanpham WHERE so_luong <= 20) + (SELECT COUNT(id) FROM phukien WHERE so_luong <= 20)) as low_stock");
-$low_stock = $stock_res->fetch_assoc()['low_stock'] ?? 0;
+$stock_res = $pdo->query("SELECT ((SELECT COUNT(id) FROM sanpham WHERE so_luong <= 20) + (SELECT COUNT(id) FROM phukien WHERE so_luong <= 20)) as low_stock");
+$low_stock = $stock_res->fetch(PDO::FETCH_ASSOC)['low_stock'] ?? 0;
 
 // Lấy 5 đơn hàng mới nhất
-$recent_orders = $conn->query("SELECT orders.*, users.name as customer_name FROM orders LEFT JOIN users ON orders.user_id = users.id ORDER BY orders.created_at DESC LIMIT 5");
+$recent_orders = $pdo->query("SELECT orders.*, users.name as customer_name FROM orders LEFT JOIN users ON orders.user_id = users.id ORDER BY orders.created_at DESC LIMIT 5")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <h2 style="margin-bottom: 25px; color: #1f2937;">Tổng Quan Hệ Thống</h2>
 
 <!-- Dashboard Cards -->
 <div class="dashboard-cards">
-    <div class="card">
+    <div class="card card-link" data-href="thongke_doanhthu.php" style="cursor: pointer;">
         <div class="card-info">
             <h3>Tổng Doanh Thu</h3>
             <p><?php echo number_format($revenue, 0, ',', '.'); ?> đ</p>
@@ -33,7 +33,7 @@ $recent_orders = $conn->query("SELECT orders.*, users.name as customer_name FROM
         <div class="card-icon icon-blue"><i class="fas fa-money-bill-wave"></i></div>
     </div>
     
-    <div class="card">
+    <div class="card card-link" data-href="quanly_donhang.php" style="cursor: pointer;">
         <div class="card-info">
             <h3>Đơn Hàng</h3>
             <p><?php echo $total_orders; ?></p>
@@ -41,7 +41,7 @@ $recent_orders = $conn->query("SELECT orders.*, users.name as customer_name FROM
         <div class="card-icon icon-green"><i class="fas fa-shopping-cart"></i></div>
     </div>
     
-    <div class="card">
+    <div class="card card-link" data-href="quanly_khachhang.php" style="cursor: pointer;">
         <div class="card-info">
             <h3>Khách Hàng</h3>
             <p><?php echo $total_users; ?></p>
@@ -49,7 +49,7 @@ $recent_orders = $conn->query("SELECT orders.*, users.name as customer_name FROM
         <div class="card-icon icon-yellow"><i class="fas fa-users"></i></div>
     </div>
     
-    <div class="card" onclick="window.location.href='quanly_sanpham.php';" style="cursor: pointer;">
+    <div class="card card-link" data-href="quanly_sanpham.php" style="cursor: pointer;">
         <div class="card-info">
             <h3>Cảnh Báo Kho</h3>
             <p><?php echo $low_stock; ?> mục</p>
@@ -75,8 +75,8 @@ $recent_orders = $conn->query("SELECT orders.*, users.name as customer_name FROM
             </tr>
         </thead>
         <tbody>
-            <?php if($recent_orders->num_rows > 0): ?>
-                <?php while($row = $recent_orders->fetch_assoc()): ?>
+            <?php if(count($recent_orders) > 0): ?>
+                <?php foreach($recent_orders as $row): ?>
                 <tr>
                     <td><strong>#<?php echo $row['id']; ?></strong></td>
                     <td><?php echo htmlspecialchars($row['customer_name'] ?? 'Khách'); ?></td>
@@ -97,7 +97,7 @@ $recent_orders = $conn->query("SELECT orders.*, users.name as customer_name FROM
                         <span class="status <?php echo $status_class; ?>"><?php echo $status_text; ?></span>
                     </td>
                 </tr>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
             <?php else: ?>
                 <tr><td colspan="5" style="text-align: center;">Chưa có đơn hàng nào</td></tr>
             <?php endif; ?>

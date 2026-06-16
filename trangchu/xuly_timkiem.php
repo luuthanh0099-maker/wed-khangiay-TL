@@ -1,32 +1,28 @@
 <?php
 session_start();
-require_once '../config/db.php';
-$conn->set_charset("utf8mb4");
+require_once '../model/xl_data.php';
+
+$db = new xl_data();
+$pdo = $db->connection_database();
 
 if (isset($_GET['q'])) {
     $q = $_GET['q'];
-    // Tìm kiếm các sản phẩm chứa từ khóa ở bất kỳ vị trí nào (ví dụ gõ 'khăn' ra 'Hộp đựng khăn giấy')
+    // Tìm kiếm các sản phẩm chứa từ khóa ở bất kỳ vị trí nào
     $search = '%' . $q . '%'; 
 
     $results = [];
 
     // 1. Tìm trong sanpham
-    $stmt1 = $conn->prepare("SELECT id, ten_sanpham as name, hinhanh as img, gia as price, 'sanpham' as type FROM sanpham WHERE ten_sanpham LIKE ? LIMIT 5");
-    $stmt1->bind_param("s", $search);
-    $stmt1->execute();
-    $res1 = $stmt1->get_result();
-    while($row = $res1->fetch_assoc()) {
-        $results[] = $row;
-    }
+    $stmt1 = $pdo->prepare("SELECT id, ten_sanpham as name, hinhanh as img, gia as price, 'sanpham' as type FROM sanpham WHERE ten_sanpham LIKE ? LIMIT 5");
+    $stmt1->execute([$search]);
+    $res1 = $stmt1->fetchAll(PDO::FETCH_ASSOC);
+    $results = array_merge($results, $res1);
 
     // 2. Tìm trong phukien
-    $stmt2 = $conn->prepare("SELECT id, ten_phukien as name, hinhanh as img, gia as price, 'phukien' as type FROM phukien WHERE ten_phukien LIKE ? LIMIT 5");
-    $stmt2->bind_param("s", $search);
-    $stmt2->execute();
-    $res2 = $stmt2->get_result();
-    while($row = $res2->fetch_assoc()) {
-        $results[] = $row;
-    }
+    $stmt2 = $pdo->prepare("SELECT id, ten_phukien as name, hinhanh as img, gia as price, 'phukien' as type FROM phukien WHERE ten_phukien LIKE ? LIMIT 5");
+    $stmt2->execute([$search]);
+    $res2 = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+    $results = array_merge($results, $res2);
 
     // Trả về HTML
     if (count($results) > 0) {

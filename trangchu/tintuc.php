@@ -1,15 +1,17 @@
 <?php
 session_start();
-require_once '../config/db.php';
+require_once '../model/xl_data.php';
 
-// Fetch tintuc grouped by type
-$tintucQuery = $conn->query("SELECT * FROM tintuc ORDER BY id DESC");
+$db = new xl_data();
+
+// Lấy tin tức theo nhóm
+$tintucList = $db->readitem("SELECT * FROM tintuc ORDER BY id DESC");
 $khuyenmai = [];
 $voucher = [];
 $thongbao = [];
 
-if ($tintucQuery && $tintucQuery->num_rows > 0) {
-    while($row = $tintucQuery->fetch_assoc()) {
+if (!empty($tintucList)) {
+    foreach($tintucList as $row) {
         if ($row['type'] == 'khuyenmai') {
             $khuyenmai[] = $row;
         } elseif ($row['type'] == 'voucher') {
@@ -28,11 +30,11 @@ if ($tintucQuery && $tintucQuery->num_rows > 0) {
     <title>Tin tức & Khuyến mãi - TL</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/style.css?v=3">
+    <link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body class="bg-light">
 
-    <!-- Header Section -->
+    <!-- Phần Đầu Trang -->
     <header class="header">
         <div class="container header-container">
             <a href="index.php" class="logo">
@@ -49,15 +51,19 @@ if ($tintucQuery && $tintucQuery->num_rows > 0) {
                 </ul>
             </nav>
             <div class="header-actions">
-                                <div class="action-icon search-icon" id="search-icon-container">
-                    <i class="fa-solid fa-magnifying-glass"></i>
+                <div class="action-icon search-icon" id="search-icon-container">
                     <!-- Khung Tìm Kiếm Dropdown -->
-                    <div class="search-dropdown" id="search-dropdown">
-                        <input type="text" id="search-input" placeholder="Tìm kiếm sản phẩm">
-                        <div class="search-results" id="search-results">
-                            <!-- Kết quả AJAX sẽ hiện ở đây -->
+                    <form action="sanphamcantim.php" method="GET" class="search-form" style="margin: 0; width: 100%;">
+                        <div class="search-dropdown" id="search-dropdown">
+                            <input type="text" name="q" id="search-input" placeholder="bạn tìm gì ?" autocomplete="off" required>
+                            <button type="submit" class="search-submit-btn">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                            </button>
+                            <div class="search-results" id="search-results">
+                                <!-- Kết quả AJAX sẽ hiện ở đây -->
+                            </div>
                         </div>
-                    </div>
+                    </form>
                 </div>
                 <a href="giohang.php" class="action-icon cart-icon">
                     <i class="fa-solid fa-basket-shopping"></i>
@@ -114,8 +120,7 @@ if ($tintucQuery && $tintucQuery->num_rows > 0) {
                     <p>Giảm: <?php echo $v['discount_percent']; ?>%</p>
                     <p>Hết hạn: <?php echo $v['expiry_date']; ?></p>
                     <div class="voucher-actions">
-                        <button class="btn-copy">Sao chép mã</button>
-                        <button class="btn-use">Sử dụng</button>
+                        <button class="btn-use" onclick="window.location.href='giohang.php'">Sử dụng</button>
                     </div>
                 </div>
                 <?php endforeach; ?>

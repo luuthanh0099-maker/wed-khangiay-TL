@@ -1,14 +1,13 @@
 <?php
 session_start();
-require_once '../config/db.php';
+require_once '../model/xl_data.php';
+$db = new xl_data();
 
 // Lấy danh sách banner từ DB
-$bannerQuery = $conn->query("SELECT * FROM banners WHERE status='active' ORDER BY id DESC");
+$bannerList = $db->readitem("SELECT * FROM banners WHERE status='active' ORDER BY FIELD(id, 4, 2, 3, 1) DESC, id DESC");
 $banners = [];
-if ($bannerQuery && $bannerQuery->num_rows > 0) {
-    while($row = $bannerQuery->fetch_assoc()) {
-        $banners[] = $row;
-    }
+if (!empty($bannerList)) {
+    $banners = $bannerList;
 } else {
     // Mặc định nếu chưa có trong DB
     $banners = [
@@ -19,22 +18,10 @@ if ($bannerQuery && $bannerQuery->num_rows > 0) {
 }
 
 // Lấy danh sách sản phẩm
-$sanphamQuery = $conn->query("SELECT * FROM sanpham ORDER BY id DESC LIMIT 4");
-$sanphamList = [];
-if ($sanphamQuery && $sanphamQuery->num_rows > 0) {
-    while($row = $sanphamQuery->fetch_assoc()) {
-        $sanphamList[] = $row;
-    }
-}
+$sanphamList = $db->readitem("SELECT * FROM sanpham ORDER BY id DESC LIMIT 4");
 
 // Lấy danh sách phụ kiện
-$phukienQuery = $conn->query("SELECT * FROM phukien ORDER BY id DESC LIMIT 4");
-$phukienList = [];
-if ($phukienQuery && $phukienQuery->num_rows > 0) {
-    while($row = $phukienQuery->fetch_assoc()) {
-        $phukienList[] = $row;
-    }
-}
+$phukienList = $db->readitem("SELECT * FROM phukien ORDER BY id DESC LIMIT 4");
 ?>
 <!DOCTYPE html>
 <html lang="vi">
@@ -44,20 +31,20 @@ if ($phukienQuery && $phukienQuery->num_rows > 0) {
     <title>TL - Bán Khăn Giấy</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/style.css?v=3">
+    <link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body>
 
-    <!-- Header Section -->
+    <!-- Phần Đầu Trang -->
     <header class="header">
         <div class="container header-container">
-            <!-- Logo -->
+            <!-- Biểu Trưng -->
             <a href="index.php" class="logo">
                 <img src="../images/logo.jpg" alt="TL" class="logo-img">
                 <span class="logo-text">TL</span>
             </a>
 
-            <!-- Navigation -->
+            <!-- Thanh Điều Hướng -->
             <nav class="navbar">
                 <ul class="nav-links">
                     <li><a href="index.php" class="active">Trang chủ</a></li>
@@ -68,17 +55,21 @@ if ($phukienQuery && $phukienQuery->num_rows > 0) {
                 </ul>
             </nav>
 
-            <!-- Actions (Search, Cart, Login, Register) -->
+            <!-- Các Hành Động (Tìm kiếm, Giỏ hàng, Đăng nhập, Đăng ký) -->
             <div class="header-actions">
                 <div class="action-icon search-icon" id="search-icon-container">
-                    <i class="fa-solid fa-magnifying-glass"></i>
                     <!-- Khung Tìm Kiếm Dropdown -->
-                    <div class="search-dropdown" id="search-dropdown">
-                        <input type="text" id="search-input" placeholder="Tìm kiếm sản phẩm">
-                        <div class="search-results" id="search-results">
-                            <!-- Kết quả AJAX sẽ hiện ở đây -->
+                    <form action="sanphamcantim.php" method="GET" class="search-form" style="margin: 0; width: 100%;">
+                        <div class="search-dropdown" id="search-dropdown">
+                            <input type="text" name="q" id="search-input" placeholder="bạn tìm gì ?" autocomplete="off" required>
+                            <button type="submit" class="search-submit-btn">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                            </button>
+                            <div class="search-results" id="search-results">
+                                <!-- Kết quả AJAX sẽ hiện ở đây -->
+                            </div>
                         </div>
-                    </div>
+                    </form>
                 </div>
                 <a href="giohang.php" class="action-icon cart-icon">
                     <i class="fa-solid fa-basket-shopping"></i>
@@ -106,16 +97,16 @@ if ($phukienQuery && $phukienQuery->num_rows > 0) {
         </div>
     </header>
 
-    <!-- Main Content -->
+    <!-- Nội Dung Chính -->
     <main>
-        <!-- Banner Slider Section -->
+        <!-- Phần Trình Chiếu Banner -->
         <section class="banner-slider">
             <div class="slider-container" id="sliderContainer">
                 <?php foreach($banners as $banner): ?>
                     <img src="../<?php echo htmlspecialchars($banner['image']); ?>" alt="<?php echo htmlspecialchars($banner['title']); ?>" class="slide">
                 <?php endforeach; ?>
             </div>
-            <!-- Navigation Dots -->
+            <!-- Nút Chuyển Slide -->
             <div class="slider-dots">
                 <?php for($i=0; $i<count($banners); $i++): ?>
                     <span class="dot <?php echo $i===0?'active':''; ?>" onclick="currentSlide(<?php echo $i; ?>)"></span>

@@ -34,15 +34,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
         
         if ($action == 'add') {
             $col_name = $type == 'sanpham' ? 'ten_sanpham' : 'ten_phukien';
-            $stmt = $conn->prepare("INSERT INTO $table ($col_name, gia, so_luong, hinhanh, mo_ta) VALUES (?, ?, ?, ?, ?)");
-            $stmt->bind_param("sdiss", $ten, $gia, $so_luong, $hinhanh, $mo_ta);
-            $stmt->execute();
+            $stmt = $pdo->prepare("INSERT INTO $table ($col_name, gia, so_luong, hinhanh, mo_ta) VALUES (?, ?, ?, ?, ?)");
+            $stmt->execute([$ten, $gia, $so_luong, $hinhanh, $mo_ta]);
         } else {
             $id = intval($_POST['id']);
             $col_name = $type == 'sanpham' ? 'ten_sanpham' : 'ten_phukien';
-            $stmt = $conn->prepare("UPDATE $table SET $col_name=?, gia=?, so_luong=?, hinhanh=?, mo_ta=? WHERE id=?");
-            $stmt->bind_param("sdissi", $ten, $gia, $so_luong, $hinhanh, $mo_ta, $id);
-            $stmt->execute();
+            $stmt = $pdo->prepare("UPDATE $table SET $col_name=?, gia=?, so_luong=?, hinhanh=?, mo_ta=? WHERE id=?");
+            $stmt->execute([$ten, $gia, $so_luong, $hinhanh, $mo_ta, $id]);
         }
         echo "<script>alert('Lưu thành công!'); window.location.href='quanly_sanpham.php?type=$type';</script>";
         exit();
@@ -50,66 +48,32 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['action'])) {
     
     if ($action == 'delete') {
         $id = intval($_POST['id']);
-        $conn->query("DELETE FROM $table WHERE id = $id");
+
+        // Kiểm tra xem sản phẩm đã có trong đơn hàng chưa
+        $stmt_check = $pdo->prepare("SELECT COUNT(*) FROM order_items WHERE product_id = ? AND product_type = ?");
+        $stmt_check->execute([$id, $type]);
+        $count = $stmt_check->fetchColumn();
+
+        if ($count > 0) {
+            echo "<script>alert('Không thể xóa do đã có khách hàng đặt mua. Bạn có thể chỉnh sửa lại số lượng kho thành 0 để khách không đặt được nữa!'); window.location.href='quanly_sanpham.php?type=$type';</script>";
+            exit();
+        }
+
+        $pdo->exec("DELETE FROM $table WHERE id = $id");
         echo "<script>alert('Đã xóa thành công!'); window.location.href='quanly_sanpham.php?type=$type';</script>";
         exit();
     }
 }
 
 // Lấy danh sách
-$items = $conn->query("SELECT * FROM $table ORDER BY id DESC");
+$items = $pdo->query("SELECT * FROM $table ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
-<style>
-/* Style riêng cho Tabs */
-.tabs {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-}
-.tab {
-    padding: 10px 20px;
-    background: #e5e7eb;
-    color: #4b5563;
-    border-radius: 6px 6px 0 0;
-    text-decoration: none;
-    font-weight: 600;
-}
-.tab.active {
-    background: #1b8a44;
-    color: #fff;
-}
-/* Style cho Form Modal (Đơn giản hóa) */
-.form-container {
-    background: #fff;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    margin-bottom: 30px;
-    display: none; /* Ẩn đi mặc định */
-}
-.form-container.active {
-    display: block;
-}
-.form-group {
-    margin-bottom: 15px;
-}
-.form-group label {
-    display: block;
-    margin-bottom: 5px;
-    font-weight: 500;
-}
-.form-control {
-    width: 100%;
-    padding: 8px 12px;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-}
-</style>
+
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
     <h2 style="color: #1f2937;">Quản Lý Sản Phẩm</h2>
-    <button class="btn btn-primary" onclick="showForm('add')"><i class="fas fa-plus"></i> Thêm mới</button>
+    <button class="btn btn-primary" id="btnAddProduct"><i class="fas fa-plus"></i> Thêm mới</button>
 </div>
 
 <!-- Tabs -->
@@ -119,7 +83,7 @@ $items = $conn->query("SELECT * FROM $table ORDER BY id DESC");
 </div>
 
 <!-- Form Thêm/Sửa -->
-<div class="form-container" id="productForm">
+<div class="modal-form-container" id="productForm">
     <h3 id="formTitle" style="margin-bottom: 15px;">Thêm <?php echo $title_type; ?></h3>
     <form method="POST" enctype="multipart/form-data">
         <input type="hidden" name="action" id="formAction" value="add">
@@ -151,7 +115,7 @@ $items = $conn->query("SELECT * FROM $table ORDER BY id DESC");
         </div>
         <div>
             <button type="submit" class="btn btn-primary">Lưu lại</button>
-            <button type="button" class="btn btn-secondary" onclick="hideForm()">Hủy</button>
+            <button type="button" class="btn btn-secondary" id="btnCancelProduct">Hủy</button>
         </div>
     </form>
 </div>
@@ -170,8 +134,8 @@ $items = $conn->query("SELECT * FROM $table ORDER BY id DESC");
             </tr>
         </thead>
         <tbody>
-            <?php if($items->num_rows > 0): ?>
-                <?php while($row = $items->fetch_assoc()): 
+            <?php if(count($items) > 0): ?>
+                <?php foreach($items as $row): 
                     $name = $type == 'sanpham' ? $row['ten_sanpham'] : $row['ten_phukien'];
                 ?>
                 <tr>
@@ -189,23 +153,23 @@ $items = $conn->query("SELECT * FROM $table ORDER BY id DESC");
                         <?php endif; ?>
                     </td>
                     <td>
-                        <button class="btn btn-secondary" onclick="editProduct(<?php echo htmlspecialchars(json_encode([
+                        <button class="btn btn-secondary btn-edit-product" data-product="<?php echo htmlspecialchars(json_encode([
                             'id' => $row['id'],
                             'ten' => $name,
                             'gia' => $row['gia'],
                             'so_luong' => $row['so_luong'],
                             'mo_ta' => $row['mo_ta'],
                             'hinhanh' => $row['hinhanh']
-                        ])); ?>)">Sửa</button>
+                        ])); ?>">Sửa</button>
                         
-                        <form method="POST" style="display:inline-block;" onsubmit="return confirm('Bạn có chắc chắn muốn xóa không?');">
+                        <form method="POST" style="display:inline-block;" class="form-delete-confirm" data-confirm-msg="Bạn có chắc chắn muốn xóa không?">
                             <input type="hidden" name="action" value="delete">
                             <input type="hidden" name="id" value="<?php echo $row['id']; ?>">
                             <button type="submit" class="btn" style="background:#ef4444; color:#fff;">Xóa</button>
                         </form>
                     </td>
                 </tr>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
             <?php else: ?>
                 <tr><td colspan="6" style="text-align:center;">Chưa có dữ liệu</td></tr>
             <?php endif; ?>
@@ -213,44 +177,6 @@ $items = $conn->query("SELECT * FROM $table ORDER BY id DESC");
     </table>
 </div>
 
-<script>
-function showForm(action) {
-    document.getElementById('productForm').classList.add('active');
-    document.getElementById('formAction').value = action;
-    if(action === 'add') {
-        document.getElementById('formTitle').innerText = 'Thêm mới';
-        document.getElementById('formId').value = '';
-        document.getElementById('formTen').value = '';
-        document.getElementById('formGia').value = '';
-        document.getElementById('formSoLuong').value = '0';
-        document.getElementById('formMoTa').value = '';
-        document.getElementById('formOldImage').value = '';
-        document.getElementById('imagePreview').innerHTML = '';
-    }
-    // Cuộn lên trên form
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-function hideForm() {
-    document.getElementById('productForm').classList.remove('active');
-}
-
-function editProduct(data) {
-    showForm('edit');
-    document.getElementById('formTitle').innerText = 'Sửa ' + data.ten;
-    document.getElementById('formId').value = data.id;
-    document.getElementById('formTen').value = data.ten;
-    document.getElementById('formGia').value = data.gia;
-    document.getElementById('formSoLuong').value = data.so_luong;
-    document.getElementById('formMoTa').value = data.mo_ta || '';
-    document.getElementById('formOldImage').value = data.hinhanh || '';
-    
-    if(data.hinhanh) {
-        document.getElementById('imagePreview').innerHTML = '<img src="../' + data.hinhanh + '" style="height:50px; border-radius:4px;"> <span style="font-size:12px;color:#666;">(Ảnh hiện tại)</span>';
-    } else {
-        document.getElementById('imagePreview').innerHTML = '';
-    }
-}
-</script>
+<script src="js/quanly_sanpham.js"></script>
 
 <?php include 'includes/footer.php'; ?>

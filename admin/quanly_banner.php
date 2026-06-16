@@ -21,9 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['banner_image'])) {
         if (move_uploaded_file($_FILES["banner_image"]["tmp_name"], $targetFilePath)) {
             // Insert into DB
             $dbPath = "images/" . $fileName; // Đường dẫn tương đối từ index.php
-            $stmt = $conn->prepare("INSERT INTO banners (image, title) VALUES (?, ?)");
-            $stmt->bind_param("ss", $dbPath, $title);
-            if ($stmt->execute()) {
+            $stmt = $pdo->prepare("INSERT INTO banners (image, title) VALUES (?, ?)");
+            if ($stmt->execute([$dbPath, $title])) {
                 $statusMsg = "Banner đã được tải lên thành công.";
             } else {
                 $statusMsg = "Lỗi khi lưu vào cơ sở dữ liệu.";
@@ -40,24 +39,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['banner_image'])) {
 if (isset($_GET['delete'])) {
     $id = intval($_GET['delete']);
     // Lấy đường dẫn ảnh để xoá file vật lý
-    $stmt = $conn->prepare("SELECT image FROM banners WHERE id = ?");
-    $stmt->bind_param("i", $id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    if ($row = $result->fetch_assoc()) {
+    $stmt = $pdo->prepare("SELECT image FROM banners WHERE id = ?");
+    $stmt->execute([$id]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if ($row) {
         $imgPath = "../" . $row['image'];
         if (file_exists($imgPath) && !empty($row['image'])) {
             unlink($imgPath);
         }
-        $delStmt = $conn->prepare("DELETE FROM banners WHERE id = ?");
-        $delStmt->bind_param("i", $id);
-        $delStmt->execute();
+        $delStmt = $pdo->prepare("DELETE FROM banners WHERE id = ?");
+        $delStmt->execute([$id]);
         $statusMsg = "Đã xóa banner thành công.";
     }
 }
 
 // Fetch banners
-$banners = $conn->query("SELECT * FROM banners ORDER BY created_at DESC");
+$banners = $pdo->query("SELECT * FROM banners ORDER BY FIELD(id, 4, 2, 3, 1) DESC, created_at DESC")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
@@ -98,8 +95,8 @@ $banners = $conn->query("SELECT * FROM banners ORDER BY created_at DESC");
             </tr>
         </thead>
         <tbody>
-            <?php if($banners && $banners->num_rows > 0): ?>
-                <?php while($row = $banners->fetch_assoc()): ?>
+            <?php if(count($banners) > 0): ?>
+                <?php foreach($banners as $row): ?>
                 <tr>
                     <td><?php echo $row['id']; ?></td>
                     <td>
@@ -107,10 +104,10 @@ $banners = $conn->query("SELECT * FROM banners ORDER BY created_at DESC");
                     </td>
                     <td><?php echo htmlspecialchars($row['title']); ?></td>
                     <td>
-                        <a href="?delete=<?php echo $row['id']; ?>" class="btn" style="background:#ef4444; color:#fff;" onclick="return confirm('Bạn có chắc chắn muốn xóa banner này?');">Xóa</a>
+                        <a href="?delete=<?php echo $row['id']; ?>" class="btn btn-delete-confirm" style="background:#ef4444; color:#fff;" data-confirm-msg="Bạn có chắc chắn muốn xóa banner này?">Xóa</a>
                     </td>
                 </tr>
-                <?php endwhile; ?>
+                <?php endforeach; ?>
             <?php else: ?>
                 <tr><td colspan="4" style="text-align: center;">Chưa có banner nào.</td></tr>
             <?php endif; ?>

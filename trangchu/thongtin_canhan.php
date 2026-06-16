@@ -1,6 +1,9 @@
 <?php
 session_start();
-require_once '../config/db.php';
+require_once '../model/xl_data.php';
+
+$db = new xl_data();
+$pdo = $db->connection_database();
 
 // Kiểm tra đăng nhập
 if (!isset($_SESSION['user_id'])) {
@@ -11,17 +14,14 @@ if (!isset($_SESSION['user_id'])) {
 $user_id = $_SESSION['user_id'];
 
 // Lấy thông tin cá nhân
-$stmt = $conn->prepare("SELECT name, email, phone, role, status, created_at FROM users WHERE id = ?");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$res = $stmt->get_result();
+$stmt = $pdo->prepare("SELECT name, email, phone, role, status, created_at FROM users WHERE id = ?");
+$stmt->execute([$user_id]);
+$user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-if ($res->num_rows == 0) {
+if (!$user) {
     echo "<script>alert('Không tìm thấy thông tin người dùng.'); window.location.href='index.php';</script>";
     exit();
 }
-
-$user = $res->fetch_assoc();
 ?>
 <!DOCTYPE html>
 <html lang="vi">
@@ -31,81 +31,10 @@ $user = $res->fetch_assoc();
     <title>Thông tin cá nhân - TL</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/style.css?v=3">
-    <style>
-        .profile-container {
-            max-width: 600px;
-            margin: 50px auto;
-            background: #fff;
-            padding: 40px;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-        }
-        .profile-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .profile-avatar {
-            width: 100px;
-            height: 100px;
-            background: #e2f0e6;
-            color: #1b8a44;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 40px;
-            margin: 0 auto 15px auto;
-        }
-        .profile-name {
-            font-size: 22px;
-            color: #333;
-            font-weight: 600;
-        }
-        .profile-role {
-            display: inline-block;
-            background: #e8f5e9;
-            color: #2e7d32;
-            padding: 4px 12px;
-            border-radius: 15px;
-            font-size: 13px;
-            margin-top: 5px;
-        }
-        .info-group {
-            margin-bottom: 20px;
-            border-bottom: 1px solid #f0f0f0;
-            padding-bottom: 15px;
-        }
-        .info-label {
-            font-size: 14px;
-            color: #777;
-            margin-bottom: 5px;
-        }
-        .info-value {
-            font-size: 16px;
-            color: #333;
-            font-weight: 500;
-        }
-        .btn-edit {
-            display: block;
-            width: 100%;
-            text-align: center;
-            background: #f0f0f0;
-            color: #333;
-            padding: 12px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 500;
-            margin-top: 30px;
-            transition: 0.2s;
-        }
-        .btn-edit:hover {
-            background: #e0e0e0;
-        }
-    </style>
+    <link rel="stylesheet" href="css/style.css?v=11">
 </head>
 <body class="bg-light">
-    <!-- Header Section -->
+    <!-- Phần Đầu Trang -->
     <header class="header">
         <div class="container header-container">
             <a href="index.php" class="logo">

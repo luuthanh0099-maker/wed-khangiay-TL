@@ -1,6 +1,9 @@
 <?php
 session_start();
-require_once '../config/db.php';
+require_once '../model/xl_data.php';
+
+$db = new xl_data();
+$pdo = $db->connection_database();
 
 // Kiểm tra quyền Admin (sử dụng session admin_id)
 if (!isset($_SESSION['admin_id'])) {
@@ -17,7 +20,7 @@ $admin_email = $_SESSION['admin_email'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard - TL Tissue</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="css/admin_style.css">
+    <link rel="stylesheet" href="css/admin_style.css?v=3">
 </head>
 <body>
     <!-- Sidebar -->
